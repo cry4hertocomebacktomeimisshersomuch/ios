@@ -1,0 +1,470 @@
+-- [[ Project Khi • WindUI & Desync Engine ]]
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+-- Load WindUI Library (Replace with your preferred WindUI loadstring if custom hosted)
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua"))()
+
+-- Webhook Configuration
+local WEBHOOK_URL = "" -- Put your Discord Webhook URL here
+
+local function SendWebhook(title, message)
+    if WEBHOOK_URL == "" or not request then return end
+    pcall(function()
+        local data = {
+            ["embeds"] = {{
+                ["title"] = title,
+                ["description"] = message,
+                ["color"] = 0x7B61FF,
+                ["footer"] = { ["text"] = "Project Khi • " .. os.date("%X") }
+            }}
+        }
+        request({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(data)
+        })
+    end)
+end
+
+-- Safe Parent Resolution
+local function getSafeParent()
+    if gethui then
+        return gethui()
+    elseif syn and syn.protect_gui then
+        local gui = Instance.new("ScreenGui")
+        syn.protect_gui(gui)
+        gui.Parent = CoreGui
+        return gui
+    else
+        return CoreGui
+    end
+end
+
+local safeParent = getSafeParent()
+
+--------------------------------------------------------------------------------
+-- PRE-LOADER & ASSET SEQUENCER (0.1s Optimizations)
+--------------------------------------------------------------------------------
+local function CreateLoadingScreen()
+    if safeParent:FindFirstChild("KhiLoader") then
+        safeParent.KhiLoader:Destroy()
+    end
+
+    local loaderGui = Instance.new("ScreenGui")
+    loaderGui.Name = "KhiLoader"
+    loaderGui.ResetOnSpawn = false
+    loaderGui.Parent = safeParent
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 320, 0, 140)
+    frame.Position = UDim2.new(0.5, -160, 0.5, -70)
+    frame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    frame.BorderSizePixel = 0
+    frame.Parent = loaderGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 12, 25)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 30, 60))
+    })
+    gradient.Rotation = 45
+    gradient.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(123, 97, 255)
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Position = UDim2.new(0, 0, 0, 12)
+    title.BackgroundTransparency = 1
+    title.Text = "PROJECT KHI"
+    title.TextColor3 = Color3.fromRGB(230, 220, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.Parent = frame
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, -40, 0, 20)
+    statusLabel.Position = UDim2.new(0, 20, 0, 50)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Initializing..."
+    statusLabel.TextColor3 = Color3.fromRGB(170, 160, 190)
+    statusLabel.Font = Enum.Font.GothamMedium
+    statusLabel.TextSize = 11
+    statusLabel.Parent = frame
+
+    local barBg = Instance.new("Frame")
+    barBg.Size = UDim2.new(1, -40, 0, 6)
+    barBg.Position = UDim2.new(0, 20, 0, 85)
+    barBg.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    barBg.BorderSizePixel = 0
+    barBg.Parent = frame
+
+    local barBgCorner = Instance.new("UICorner")
+    barBgCorner.CornerRadius = UDim.new(1, 0)
+    barBgCorner.Parent = barBg
+
+    local barFill = Instance.new("Frame")
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(123, 97, 255)
+    barFill.BorderSizePixel = 0
+    barFill.Parent = barBg
+
+    local barFillCorner = Instance.new("UICorner")
+    barFillCorner.CornerRadius = UDim.new(1, 0)
+    barFillCorner.Parent = barFill
+
+    local function UpdateProgress(text, ratio)
+        statusLabel.Text = text
+        TweenService:Create(barFill, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(ratio, 0, 1, 0)
+        }):Play()
+    end
+
+    return loaderGui, UpdateProgress
+end
+
+local loaderGui, updateProgress = CreateLoadingScreen()
+
+for i = 1, 5 do
+    updateProgress("Loading Assets " .. i .. "/5", (i / 5) * 0.5)
+    task.wait(0.02)
+end
+
+-- CoreGui Scan for Monster Form Button
+local function ScanAndTriggerMonsterForm()
+    for _, gui in ipairs(CoreGui:GetDescendants()) do
+        if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Name:lower():find("monster") then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.Health = 0
+            end
+            LocalPlayer.CharacterAdded:Wait()
+            task.wait(0.1)
+            if firesignal then
+                pcall(function() firesignal(gui.Activated) end)
+                task.wait(0.05)
+                pcall(function() firesignal(gui.Activated) end)
+            end
+            break
+        end
+    end
+end
+ScanAndTriggerMonsterForm()
+
+for i = 1, 5 do
+    updateProgress("Loading Payload " .. i .. "/5", 0.5 + (i / 5) * 0.5)
+    task.wait(0.02)
+end
+
+task.wait(0.1)
+loaderGui:Destroy()
+SendWebhook("Project Khi Loaded", "User **" << LocalPlayer.Name << "** successfully initialized Project Khi.")
+
+--------------------------------------------------------------------------------
+-- TOUCH CONTROLS & AUTO-CLICKER (0.1s Fast Loop)
+--------------------------------------------------------------------------------
+local touchGui = PlayerGui:WaitForChild("TouchGui", 5)
+local touchControlFrame = touchGui and touchGui:WaitForChild("TouchControlFrame", 5)
+local jumpButton = touchControlFrame and touchControlFrame:WaitForChild("JumpButton", 5)
+local punchButton = jumpButton and jumpButton:WaitForChild("PunchButton", 5)
+local dashButton = jumpButton and jumpButton:WaitForChild("DashButton", 5)
+
+local function clickButton(button)
+    if button and button.Parent and firesignal then
+        firesignal(button.Activated)
+        firesignal(button.MouseButton1Click)
+        firesignal(button.MouseButton1Down)
+        firesignal(button.MouseButton1Up)
+    end
+end
+
+local bar = PlayerGui:FindFirstChild("Bar", true)
+local magicHealth = bar and bar:FindFirstChild("MagicHealth")
+local ultImageButton = magicHealth and magicHealth:FindFirstChild("ImageButton")
+
+local function tryClickUltButton()
+    if not (magicHealth and ultImageButton) then return end
+    clickButton(ultImageButton)
+end
+
+--------------------------------------------------------------------------------
+-- INVISIBLE & DESYNC ENGINE (Finisher & Anti-Death Protection)
+--------------------------------------------------------------------------------
+local function MakeTransparent(character)
+    if not character then return end
+    task.spawn(function()
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.Transparency = 0.67
+            elseif part:IsA("Decal") then
+                part.Transparency = 0.67
+            end
+        end
+    end)
+end
+
+if LocalPlayer.Character then MakeTransparent(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    newChar:WaitForChild("HumanoidRootPart")
+    MakeTransparent(newChar)
+end)
+
+function MainEnv()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    local humanoid = char:WaitForChild("Humanoid")
+
+    -- Anti-Death Protection when health drops to 20% or lower
+    humanoid.HealthChanged:Connect(function(health)
+        local maxHealth = humanoid.MaxHealth
+        if (health / maxHealth) <= 0.20 and health > 0 then
+            -- Safely pull back or trigger defensive measures during finisher threshold
+            hrp.CFrame = hrp.CFrame + Vector3.new(0, 25, 0)
+        end
+    end)
+
+    getgenv().connections = getgenv().connections or {}
+
+    task.spawn(function()
+        getgenv().ATCH = false 
+        getgenv().EN = nil
+
+        task.spawn(function()
+            while not getgenv().gay do
+                local dist = math.huge
+                local live = Workspace:FindFirstChild("Live")
+                if live then
+                    for _, part in pairs(live:GetChildren()) do
+                        if part:IsA("Model") and part:FindFirstChild("HumanoidRootPart") and part ~= char then
+                            local distance = (part.HumanoidRootPart.Position - hrp.Position).Magnitude
+                            if distance < dist then 
+                                dist = distance 
+                                getgenv().EN = part.HumanoidRootPart 
+                            end 
+                        end 
+                    end
+                end
+                task.wait(0.1)
+            end
+        end)
+
+        task.wait(0.1)
+        getgenv().ATCH = true 
+
+        local e = Instance.new('Part')
+        _G.P = e 
+
+        local p = Instance.new("Part", char)
+        p.Size = Vector3.new(0.5, 0.5, 0.5)
+        p.CanCollide, p.CanTouch, p.Anchored, p.Transparency = false, false, true, 1
+
+        local camera = Workspace.CurrentCamera
+        local WEIGHT = 15
+
+        RunService:BindToRenderStep("UpdateSubject", Enum.RenderPriority.First.Value, function()
+            camera.CameraSubject = p
+            if getgenv().val then
+                TweenService:Create(p, TweenInfo.new(2/WEIGHT), {Position = e.Position}):Play()
+            end
+        end)
+        getgenv().val = e
+
+        local conn = RunService.Heartbeat:Connect(function(step)
+            if not getgenv().EN or not getgenv().EN.Parent then return end
+            local old = hrp.CFrame
+            local headPart = char:FindFirstChild("Head")
+            local old2 = headPart and headPart.CFrame or hrp.CFrame
+
+            hrp.CFrame = CFrame.new(getgenv().EN.CFrame.X, 432, getgenv().EN.CFrame.Z) * CFrame.Angles(math.rad(90), 0, 0)
+            e.CFrame = old2
+
+            RunService.RenderStepped:Wait()
+            hrp.CFrame = old
+            hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(getgenv().EN.Position.X, hrp.Position.Y, getgenv().EN.Position.Z))
+        end)
+        table.insert(getgenv().connections, conn)
+
+        repeat task.wait() until getgenv().ATCH == false or humanoid.Health == 0
+        e:Destroy()
+        p:Destroy()
+        RunService:UnbindFromRenderStep("UpdateSubject")
+        camera.CameraSubject = char
+    end)
+end
+
+MainEnv()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.1)
+    MainEnv()
+end)
+
+--------------------------------------------------------------------------------
+-- KILL FARM & GOD SLAYER COMBO ENGINE (Auto-Started with 0.1s Timers)
+--------------------------------------------------------------------------------
+local KhiConfig = {
+    KillFarm = true,
+    SafeYThreshold = -30
+}
+
+local ExecutingUlt = false
+local rescuePlatform = Instance.new("Part", Workspace)
+rescuePlatform.Name = "Khi_SafePlatform"
+rescuePlatform.Size = Vector3.new(30, 2, 30)
+rescuePlatform.Anchored, rescuePlatform.CanCollide, rescuePlatform.Transparency = true, true, 1
+
+local function pressKey(keyCode)
+    VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+    task.wait(0.01)
+    VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+end
+
+local function GetClosestTarget()
+    local closest, minDist = nil, math.huge
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    
+    for _, target in pairs(Players:GetPlayers()) do
+        if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = target.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local dist = (char.HumanoidRootPart.Position - target.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDist then minDist = dist closest = target end
+            end
+        end
+    end
+    return closest
+end
+
+local function HasGodSlayer()
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    return (bp and bp:FindFirstChild("God Slayer")) or (char and char:FindFirstChild("God Slayer"))
+end
+
+RunService.RenderStepped:Connect(function()
+    if not KhiConfig.KillFarm or ExecutingUlt then return end
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
+    local root = char.HumanoidRootPart
+    local targetPlayer = GetClosestTarget()
+
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
+
+    if root.Position.Y < KhiConfig.SafeYThreshold then
+        rescuePlatform.CFrame = CFrame.new(root.Position.X, 100, root.Position.Z)
+        root.CFrame = CFrame.new(root.Position.X, 104, root.Position.Z)
+        return
+    end
+
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        root.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 1.5, 3)
+    end
+end)
+
+-- Fast Combat Loop (0.1s Interval)
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if KhiConfig.KillFarm and not ExecutingUlt then
+            local godSlayerTool = HasGodSlayer()
+            if godSlayerTool then
+                ExecutingUlt = true
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChildOfClass("Humanoid") then
+                    char.Humanoid:EquipTool(godSlayerTool)
+                end
+
+                local victim = GetClosestTarget()
+                if victim and victim.Character and victim.Character:FindFirstChild("HumanoidRootPart") and char then
+                    char.HumanoidRootPart.CFrame = victim.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+                    task.wait(0.05)
+                    pressKey(Enum.KeyCode.One)
+                    task.wait(0.05)
+                    pressKey(Enum.KeyCode.Three)
+                    task.wait(0.05)
+                    tryClickUltButton()
+                end
+                ExecutingUlt = false
+            else
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                local char = LocalPlayer.Character
+                if bp and char and char:FindFirstChildOfClass("Humanoid") then
+                    for _, tool in pairs(bp:GetChildren()) do
+                        if tool:IsA("Tool") then char.Humanoid:EquipTool(tool) end
+                    end
+                end
+                pressKey(Enum.KeyCode.One)
+                pressKey(Enum.KeyCode.Two)
+                pressKey(Enum.KeyCode.Three)
+                pressKey(Enum.KeyCode.Four)
+            end
+        end
+    end
+end)
+
+-- Touch Button Execution Loop (0.1s Interval)
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if KhiConfig.KillFarm and not ExecutingUlt then
+            clickButton(jumpButton)
+            clickButton(punchButton)
+            clickButton(dashButton)
+            tryClickUltButton()
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- WINDUI INTERFACE (Dark to Blue-Purple Gradient Theme)
+--------------------------------------------------------------------------------
+local Window = WindUI:CreateWindow({
+    Title = "PROJECT KHI",
+    Icon = "rbxassetid://10723415903",
+    Author = "Project Khi Suite",
+    Folder = "ProjectKhi",
+    Size = UDim2.new(0, 520, 0, 360),
+    Transparent = 0.15,
+    Theme = "Dark",
+    Accent = Color3.fromRGB(123, 97, 255)
+})
+
+local HomeTab = Window:Tab({ Title = "Home", Icon = "home" })
+local FarmTab = Window:Tab({ Title = "Kill Farm & Combat", Icon = "sword" })
+
+HomeTab:Paragraph({
+    Title = "Welcome to Project Khi",
+    Desc = "Beta state active. Key system integration in progress. All execution timers optimized to 0.1s."
+})
+
+FarmTab:Toggle({
+    Title = "Start Kill Farms",
+    Default = true,
+    Callback = function(state)
+        KhiConfig.KillFarm = state
+    end
+})
+
+WindUI:Notify({
+    Title = "Project Khi Loaded",
+    Content = "Kill Farm and Desync Engine successfully started.",
+    Duration = 3
+})
